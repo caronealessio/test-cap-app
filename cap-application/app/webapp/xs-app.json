@@ -1,0 +1,11 @@
+{
+  "welcomeFile": "/index.html",
+  "routes": [
+    {
+      "source": "^/main-service/(.*)",
+      "target": "/main-service/$1",
+      "destination": "main-service",
+      "authenticationType": "none"
+    }
+  ]
+}

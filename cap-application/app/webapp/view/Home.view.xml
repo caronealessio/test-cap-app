@@ -1,0 +1,12 @@
+<mvc:View controllerName="appcap.appcap.controller.Home"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m">
+    <Page id="page" title="My App">
+        <content>
+          <Button
+            id="button"
+            text="Converti in Intero"
+            press=".onCallToInteger" />
+        </content>
+      </Page>
+</mvc:View>
