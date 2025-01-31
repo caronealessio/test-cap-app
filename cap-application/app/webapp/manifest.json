@@ -51,15 +51,11 @@
         "settings": {
           "bundleName": "appcap.appcap.i18n.i18n"
         }
-      },
-      "": {
-        "type": "sap.ui.model.json.JSONModel",
-        "dataSource": "mainService"
       }
     },
     "dataSources": {
-      "mainService": {
-        "uri": "/main-service/",
+      "MainService": {
+        "uri": "/odata/main-service/",
         "type": "OData",
         "settings": {
           "odataVersion": "4.0"

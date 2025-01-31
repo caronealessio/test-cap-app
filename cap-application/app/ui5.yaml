@@ -15,6 +15,9 @@ server:
             - /resources
             - /test-resources
           url: https://ui5.sap.com
+        backend:
+          - path: /main-service # Reindirizza le chiamate al servizio CAP
+            url: http://localhost:4004 # URL del servizio CAP in esecuzione in locale
     - name: fiori-tools-appreload
       afterMiddleware: compression
       configuration:
