@@ -1,9 +1,17 @@
 // Importa le librerie necessarie
-const multer = require("multer");
-const pdfParse = require("pdf-parse");
-const xml2js = require("xml2js");
 const fs = require("fs");
-const axios = require("axios");
+const unzipper = require("unzipper");
+const csvParser = require("csv-parser");
+const {
+  isValidPdf,
+  convertPdfTextToXml,
+  convertXmlToBase64,
+  tryParsePdf,
+  extractZip,
+  readCsvFile,
+  createDirectoriesIfNeeded,
+  setDocumentGo2Doc,
+} = require("./utils");
 
 module.exports = (srv) => {
   srv.on("toInteger", (req) => {
@@ -12,11 +20,11 @@ module.exports = (srv) => {
     return { value: parseInt(value) };
   });
 
-  // Implementazione dell'azione `uploadSingleFattura`
   srv.on("uploadSingleFattura", async (req) => {
     try {
       // Ottieni la stringa Base64 del file dalla richiesta
       const fileBase64 = req.data.file;
+      const fileName = req.data.fileName || "file_senza_nome.pdf";
 
       if (!fileBase64) {
         throw new Error("File non trovato");
@@ -31,122 +39,129 @@ module.exports = (srv) => {
       }
 
       // Estrai il testo dal PDF
-      const pdfData = await pdfParse(buffer);
+      const pdfData = await tryParsePdf(buffer);
+
+      console.log("[INFO] PDFDATA", pdfData);
 
       // Converti il testo del PDF in XML
       const xmlData = convertPdfTextToXml(pdfData.text);
-
       const xmlDataBase64 = convertXmlToBase64(xmlData);
       console.log("[INFO] xmlDataBase64", xmlDataBase64);
 
-      // Restituisci il file XML
-      return { value: "Fattura inviata correttamente" };
+      // Creazione dell'oggetto da inviare a Go2Doc
+      const fileObject = {
+        base64: xmlDataBase64, // Usa il file originale in base64
+        filename: fileName,
+        token: "", // Se necessario, verrà richiesto un nuovo token
+      };
+
+      console.log("[INFO] fileObject", fileObject);
+
+      // Chiamata a Go2Doc per l'invio del documento
+      // const result = await setDocumentGo2Doc(fileObject);
+
+      // console.log("[INFO] Documento caricato su Go2Doc con successo", result);
+
+      // Restituisci il risultato dell'operazione
+      return { value: "Fattura inviata correttamente a Go2Doc" };
     } catch (error) {
       console.error("Errore nell'upload della fattura: ", error);
       throw new Error("Errore durante la conversione del file: " + error.message);
     }
   });
-};
 
-// Funzione per convertire il testo del PDF in formato XML
-function convertPdfTextToXml(pdfText) {
-  const builder = new xml2js.Builder();
-  // Esegui il parsing del testo e crea un oggetto XML (questo dipende dalla struttura della tua fattura)
-  const xmlObj = {
-    invoice: {
-      text: pdfText, // Aggiungi qui la logica per strutturare i dati correttamente
-    },
-  };
+  srv.on("uploadMassiveFattura", async (req) => {
+    const { file } = req.data;
 
-  return builder.buildObject(xmlObj);
-}
-
-// Funzione per convertire XML in Base64
-function convertXmlToBase64(xmlData) {
-  // 1. Converti il testo XML in un buffer
-  const buffer = Buffer.from(xmlData, "utf-8");
-
-  // 2. Codifica il buffer in Base64
-  const base64String = buffer.toString("base64");
-
-  return base64String;
-}
-
-async function setDocumentGo2Doc(fileObject) {
-  const base64 = fileObject?.base64;
-  const filename = fileObject?.filename;
-  var metadato = fileObject?.metadato;
-  var token = fileObject?.token;
-
-  metadato.document.content = {
-    data: base64,
-    mimeType: "application/pdf",
-    name: filename,
-  };
-  metadato.folderId = [];
-  metadato.folderPath = [];
-
-  const jsonData = JSON.stringify(metadato);
-
-  try {
-    if (!token || token === "''") {
-      console.log("Fetching new token");
-      const response = await getJWT();
-      token = response.data.authenticationToken;
-      console.log("Fetched token:", token);
+    // Controllo se il file è stato ricevuto
+    if (!file) {
+      console.error("[ERROR] Nessun file ricevuto");
+      req.error(400, "File non valido");
+      return;
     }
 
-    const config = {
-      url: process.env.BASE_URL_GO2DOC + "/go2docdest/go2doc/documentservice/v1/document/base64",
-      type: "POST",
-      method: "POST",
-      data: jsonData,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-    };
+    try {
+      // Converte il file da Base64 a Buffer
+      const buffer = Buffer.from(file, "base64");
 
-    const response2 = await axios.request(config);
-    console.log(response2);
-    // result.Result = response2.data.documentId;
-    // result.Token = token;
-  } catch (error) {
-    console.log(error);
-  }
-  return result;
-}
+      // Definizione delle cartelle di lavoro
+      const uploadPath = "./uploads";
+      const processedPath = "./processed_files";
+      const tempExtractPath = "./temp_extracted";
 
-function getJWT() {
-  return new Promise((resolve, reject) => {
-    let data = JSON.stringify({
-      userName: "ACQBTPG2DUser",
-      password: "Password.1",
-      repositoryName: "ACQOS",
-    });
+      // Creazione delle cartelle se non esistono
+      if (!fs.existsSync(uploadPath)) fs.mkdirSync(uploadPath, { recursive: true });
+      if (!fs.existsSync(processedPath)) fs.mkdirSync(processedPath, { recursive: true });
+      if (!fs.existsSync(tempExtractPath)) fs.mkdirSync(tempExtractPath, { recursive: true });
 
-    let config = {
-      method: "post",
-      url: process.env.BASE_URL_GO2DOC + "/go2docdest/go2doc/authenticationservice/authenticate/getToken",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      data: data,
-    };
+      // Percorso del file ZIP salvato
+      const zipPath = path.join(uploadPath, "uploaded.zip");
+      fs.writeFileSync(zipPath, buffer);
+      console.log("[INFO] ZIP salvato:", zipPath);
 
-    console.log("Token JWT Config:", config);
-    axios
-      .request(config)
-      .then((response) => {
-        resolve(response);
-      })
-      .catch((e) => {
-        console.log(e);
-        reject(e);
+      // Estrazione del contenuto dello ZIP nella cartella temporanea
+      await fs
+        .createReadStream(zipPath)
+        .pipe(unzipper.Extract({ path: tempExtractPath }))
+        .promise();
+      console.log("[INFO] ZIP estratto in:", tempExtractPath);
+
+      // Verifica la presenza del file CSV
+      const csvFilePath = path.join(tempExtractPath, "file_csv.csv");
+      if (!fs.existsSync(csvFilePath)) {
+        console.error('[ERROR] Il file CSV "file_csv.csv" non è presente nello ZIP');
+        req.error(400, 'Il file CSV "file_csv.csv" non è presente nello ZIP');
+        return;
+      }
+      console.log("[INFO] File CSV trovato:", csvFilePath);
+
+      // Lettura del file CSV per estrarre i nomi dei file PDF
+      let fileNames = [];
+      await new Promise((resolve, reject) => {
+        fs.createReadStream(csvFilePath)
+          .pipe(csvParser()) // Parsing del CSV
+          .on("data", (row) => {
+            const fileNameFromCsv = row[Object.keys(row)[1]]; // Prende il valore della seconda colonna
+            fileNames.push(fileNameFromCsv);
+          })
+          .on("end", resolve) // Segnala il completamento della lettura
+          .on("error", reject); // Gestisce eventuali errori
       });
-  });
-}
 
-const isValidPdf = (buffer) => {
-  return buffer.slice(0, 4).toString() === "%PDF";
+      console.log("[INFO] File PDF da cercare:", fileNames);
+
+      // Ciclo sui file PDF per creare l'oggetto e inviare la chiamata POST
+      for (const fileName of fileNames) {
+        const sourcePath = path.join(tempExtractPath, fileName);
+        const destinationPath = path.join(processedPath, fileName);
+
+        if (fs.existsSync(sourcePath)) {
+          // Copia il file PDF nella cartella processed_files
+          fs.copyFileSync(sourcePath, destinationPath);
+          console.log("[SUCCESS] File copiato:", destinationPath);
+
+          // Crea l'oggetto PDF
+          // const pdfObject = createPdfObject(fileName, destinationPath);
+
+          // console.log("[INFO] pdfObject", pdfObject);
+
+          // // Esegui la chiamata POST
+          // await sendPostRequest(pdfObject);
+        } else {
+          console.error("[ERROR] File", fileName, "non trovato nella cartella estratta.");
+        }
+      }
+
+      return { value: "Upload ed elaborazione completati con successo!" };
+    } catch (err) {
+      console.error("[ERROR] Errore durante l'upload:", err);
+      req.error(500, "Errore interno durante l'upload");
+    }
+  });
+
+  srv.on("downloadSingleDispPag", async (req) => {});
+
+  srv.on("downloadMassiveDispPag", async (req) => {});
+
+  srv.on("downloadCU", async (req) => {});
 };

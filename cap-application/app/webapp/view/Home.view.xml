@@ -2,20 +2,60 @@
   xmlns:mvc="sap.ui.core.mvc"
   xmlns="sap.m"
   xmlns:u="sap.ui.unified">
+
   <Page id="page"
     title="My App">
     <content>
-      <Button id="button"
-        text="Converti in Intero"
-        press=".onCallToInteger" />
-      <u:FileUploader id="fileUploader"
-        name="file"
-        change="onFileChange"
-        fileType="pdf" />
+      <VBox>
 
-      <Button text="Upload Single Fattura"
-        press="onUploadPress"
-        enabled="true" />
+        <Button id="button"
+          text="Converti in Intero"
+          press=".onCallToInteger"
+          class="sapUiSmallMarginBottom"/>
+
+        <ToolbarSeparator/>
+
+        <u:FileUploader id="fileUploaderUploadSingleFattura"
+          name="file"
+          change="onFileChange"
+          fileType="pdf" />
+
+        <Button text="Upload Single Fattura"
+          press="onUploadSingleFatturaPress"
+          enabled="true"
+          class="sapUiSmallMarginBottom"/>
+
+        <ToolbarSeparator/>
+
+        <u:FileUploader id="fileUploaderUploadMassiveFattura"
+          name="file"
+          change="onFileChange"
+          fileType="zip"/>
+
+        <Button text="Upload Massivo Fattura"
+          press="onUploadMassiveFatturaPress"
+          enabled="true"
+          class="sapUiSmallMarginBottom"/>
+
+        <ToolbarSeparator/>
+
+        <Button text="Download Singola Fattura"
+          press="onDownloadSingleDispPagPress"
+          class="sapUiSmallMarginBottom"/>
+
+        <ToolbarSeparator/>
+
+        <Button text="Download Massivo Fatture"
+          press="onDownloadMassiveDispPagPress"
+          class="sapUiSmallMarginBottom"/>
+
+        <ToolbarSeparator/>
+
+        <Button text="Download CU"
+          press="onDownloadCUPress"
+          class="sapUiSmallMarginBottom"/>
+
+      </VBox>
     </content>
   </Page>
 
